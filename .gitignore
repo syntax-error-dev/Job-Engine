@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Environment variables (КРИТИЧЕСКО: твои токены и пароли)
+.env
+.env.*
+
+# Базы данных (чтобы не пушить локальные тесты)
+*.sqlite
+*.sqlite3
+jobs.db
+identifier.sqlite
+
+# IDE - PyCharm / VSCode
+.idea/
+.vscode/
+*.swp
+
+# Docker
+.docker/
+
+# Playwright (логи и браузеры, если они скачаются в папку проекта)
+/test-results/
+/pw-browser/
