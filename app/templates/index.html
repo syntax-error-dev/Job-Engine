@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart JobEngine | AI Vacancy Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .score-badge { width: 65px; font-weight: bold; font-size: 0.9rem; }
+        .table-container { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        .source-tag { font-size: 0.7rem; letter-spacing: 0.5px; border: 1px solid #dee2e6; padding: 4px 8px; }
+        .card-header { font-weight: 600; background-color: #fff; border-bottom: 1px solid #edf2f7; }
+        #status-indicator { transition: all 0.3s ease; }
+        .pending-row { opacity: 0.7; }
+    </style>
+</head>
+<body>
+
+    <div class="container py-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="fw-bold text-primary m-0">🕵️ JobEngine <span class="text-secondary fs-5 fw-light text-uppercase">v1.0 Global</span></h1>
+
+            <form action="/clear" method="post" onsubmit="return confirm('Delete all saved vacancies?');">
+                <button type="submit" class="btn btn-outline-danger btn-sm fw-bold px-3">🗑️ Clear Database</button>
+            </form>
+        </div>
+
+        <div id="status-indicator" class="alert alert-primary d-none mb-4 shadow-sm align-items-center" role="alert">
+            <div class="spinner-border spinner-border-sm me-3" role="status"></div>
+            <div>
+                <strong>Scanning & AI Analysis in progress...</strong>
+                <span class="ms-2 small text-dark">New results will appear in the table automatically.</span>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-5">
+            <div class="card-body p-4">
+                <form id="search-form" action="/run" method="post" class="row g-4">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold small text-uppercase text-muted">Specialization</label>
+                        <input type="text" name="keyword" class="form-control form-control-lg" placeholder="e.g. Python, React" value="Python" required>
+                    </div>
+
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold small text-uppercase text-muted">Experience</label>
+                        <select name="experience" class="form-select form-select-lg">
+                            <option value="no">0 years</option>
+                            <option value="1y">1 year</option>
+                            <option value="2y">2 years</option>
+                            <option value="3y">3 years</option>
+                            <option value="5y">5+ years</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold small text-uppercase text-muted">Your Core Skills (for AI)</label>
+                        <input type="text" name="skills" class="form-control form-control-lg" placeholder="FastAPI, Docker, English C1">
+                    </div>
+
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-success btn-lg w-100 fw-bold shadow-sm">🚀 SCAN MARKETS</button>
+                    </div>
+
+                    <div class="col-12 border-top pt-3 mt-3">
+                        <label class="form-label fw-bold small text-uppercase text-muted d-block mb-2">Job Sources:</label>
+                        <div class="form-check form-check-inline me-4">
+                            <input class="form-check-input" type="checkbox" name="sources" value="djinni" id="djinni" checked>
+                            <label class="form-check-label fw-semibold" for="djinni">Djinni</label>
+                        </div>
+                        <div class="form-check form-check-inline me-4">
+                            <input class="form-check-input" type="checkbox" name="sources" value="dou" id="dou" checked>
+                            <label class="form-check-label fw-semibold" for="dou">DOU</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" name="sources" value="linkedin" id="linkedin" checked>
+                            <label class="form-check-label fw-semibold" for="linkedin">LinkedIn</label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <h4 class="mb-4 fw-bold text-dark">Market Insights</h4>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr class="small text-uppercase text-muted">
+                            <th style="width: 100px;">Match</th>
+                            <th>Position</th>
+                            <th>Company</th>
+                            <th>Source</th>
+                            <th style="width: 35%;">AI Verdict</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobs-table-body">
+                        {% for job in jobs %}
+                        <tr class="{{ 'pending-row' if job.suitability_score is none }}">
+                            <td>
+                                {% if job.suitability_score is not none %}
+                                    <div class="badge rounded-pill score-badge bg-{{ 'success' if job.suitability_score >= 75 else ('warning' if job.suitability_score >= 50 else 'danger') }}">
+                                        {{ job.suitability_score }}%
+                                    </div>
+                                {% else %}
+                                    <span class="badge bg-secondary rounded-pill score-badge">PENDING</span>
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                <a href="{{ job.url }}" target="_blank" class="text-decoration-none text-dark fw-bold">
+                                    {{ job.title }}
+                                </a>
+                            </td>
+
+                            <td><span class="text-muted fw-semibold small">{{ job.company }}</span></td>
+
+                            <td>
+                                <span class="badge bg-white text-dark source-tag text-uppercase">
+                                    {{ job.source }}
+                                </span>
+                            </td>
+
+                            <td>
+                                <p class="small text-secondary mb-0">
+                                    {{ job.ai_summary if job.ai_summary else "Analyzing vacancy requirements..." }}
+                                </p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+
+                        {% if not jobs %}
+                        <tr>
+                            <td colspan="5" class="text-center py-5 text-muted">
+                                No vacancies found. Adjust parameters and click <strong>SCAN MARKETS</strong>.
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const form = document.getElementById('search-form');
+    const statusIndicator = document.getElementById('status-indicator');
+    const tableBody = document.getElementById('jobs-table-body');
+    let refreshInterval = null;
+
+    async function updateTable() {
+        try {
+            // Добавляем timestamp, чтобы браузер не кешировал ответ
+            const response = await fetch('/?t=' + Date.now());
+            const html = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const newRows = doc.getElementById('jobs-table-body').innerHTML;
+
+            tableBody.innerHTML = newRows;
+
+            // Если в таблице всё еще есть PENDING, продолжаем опрос
+            const hasPending = newRows.includes('PENDING');
+            if (!hasPending && refreshInterval) {
+                console.log("All analyzed. Stopping.");
+                // Не останавливаем сразу, дадим пользователю увидеть результат
+                setTimeout(stopPolling, 5000);
+            }
+        } catch (err) {
+            console.error("Refresh error:", err);
+        }
+    }
+
+    function startPolling() {
+        statusIndicator.classList.remove('d-none');
+        statusIndicator.classList.add('d-flex');
+        if (!refreshInterval) {
+            refreshInterval = setInterval(updateTable, 3000);
+        }
+    }
+
+    function stopPolling() {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+        }
+        statusIndicator.classList.replace('d-flex', 'd-none');
+    }
+
+    form.addEventListener('submit', () => {
+        // Задержка перед началом опроса, чтобы пайплайн успел стартовать
+        setTimeout(startPolling, 2000);
+    });
+
+    // Если при загрузке страницы уже есть PENDING вакансии — запускаем опрос сразу
+    if (document.body.innerHTML.includes('PENDING')) {
+        startPolling();
+    }
+</script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
