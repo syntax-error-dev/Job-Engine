@@ -8,74 +8,142 @@ class DjinniScraper:
     def __init__(self, keyword="Python", exp_level="no"):
         self.keyword = keyword
         self.exp_level = exp_level
-        self.base_url = f"https://djinni.co/jobs/?primary_keyword={keyword}&exp_level={exp_level}&sort=date&lang=en"
+        self.base_url = (
+            f"https://djinni.co/jobs/?primary_keyword={keyword}"
+            f"&exp_level={exp_level}&sort=date&lang=en"
+        )
 
     async def scrape(self) -> list[VacancyCreate]:
         all_vacancies = []
+
         async with async_playwright() as p:
             print(f"🔗 [Djinni] Starting browser for: {self.keyword}...")
 
-            browser = await p.chromium.launch(headless=False)
-
+            browser = await p.chromium.launch(headless=True)  # headless для production
             context = await browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                viewport={"width": 1920, "height": 1080},
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
             )
             page = await context.new_page()
 
             try:
                 print(f"📄 [Djinni] Loading: {self.base_url}")
                 await page.goto(self.base_url, wait_until="load", timeout=60000)
-
-                await asyncio.sleep(5)
+                await asyncio.sleep(3)
 
                 job_links = await page.query_selector_all(
-                    "a[href*='/jobs/'].job-list-item__link, a[href*='/jobs/']:not([class*='btn'])")
+                    "a[href*='/jobs/'].job-list-item__link, "
+                    "a[href*='/jobs/']:not([class*='btn'])"
+                )
+                print(f"🔍 Found {len(job_links)} job links")
 
-                print(f"🔍 Found {len(job_links)} job links via broad search")
-
+                # Собираем базовые данные со списка
+                job_items = []
                 for link in job_links:
                     url = await link.get_attribute("href")
-                    if not url or '/jobs/' not in url or 'view_reviews' in url:
+                    if not url or "/jobs/" not in url or "view_reviews" in url:
+                        continue
+                    if url.startswith("/"):
+                        url = f"https://djinni.co{url}"
+                    url = url.split("?")[0]
+
+                    # Пропускаем служебные ссылки — только реальные вакансии вида /jobs/12345-slug/
+                    import re
+                    if not re.search(r"/jobs/\d+", url):
                         continue
 
-                    if url.startswith('/'): url = f"https://djinni.co{url}"
-                    title = await link.inner_text()
-                    if not title.strip(): continue
+                    title = (await link.inner_text()).strip()
+                    # inner_text может захватить компанию/зарплату из родителя — берём только первую строку
+                    title = title.split("\n")[0].strip()
+                    if not title:
+                        continue
 
-                    company = await page.evaluate('''
-                                                  (el) => {
-                                                      let parent = el.closest('li, div.job-list-item, article');
-                                                      if (!parent) return 'Private';
-                                                      let comp = parent.querySelector('a[href*="/company/"]');
-                                                      return comp ? comp.innerText : 'Private';
-                                                  }
-                                                  ''', link)
+                    company = await page.evaluate(
+                        """(el) => {
+                            let parent = el.closest('li, div.job-list-item, article');
+                            if (!parent) return 'Private';
+                            let comp = parent.querySelector('a[href*="/company/"]');
+                            return comp ? comp.innerText.trim() : 'Private';
+                        }""",
+                        link,
+                    )
 
-                    description = await page.evaluate('''
-                                                      (el) => {
-                                                          let parent = el.closest('li, div.job-list-item, article');
-                                                          if (!parent) return '';
-                                                          let desc = parent.querySelector('.job-list-item__description, .list-jobs__description, p');
-                                                          return desc ? desc.innerText : '';
-                                                      }
-                                                      ''', link)
+                    salary = await page.evaluate(
+                        """(el) => {
+                            let parent = el.closest('li, div.job-list-item, article');
+                            if (!parent) return null;
+                            let s = parent.querySelector('.public-salary-item, .job-list-item__salary');
+                            return s ? s.innerText.trim() : null;
+                        }""",
+                        link,
+                    )
 
-                    all_vacancies.append(VacancyCreate(
-                        title=title.strip(),
-                        company=company.strip(),
-                        url=url.split('?')[0],
-                        description=description.strip()[:1000],
-                        source=JobSource.DJINNI,
-                        salary=None
-                    ))
-                    print(f"✅ Captured: {title.strip()}")
+                    job_items.append({
+                        "url": url,
+                        "title": title,
+                        "company": company.strip(),
+                        "salary": salary,
+                    })
 
-                seen_urls = set()
-                unique_vacancies = []
-                for v in all_vacancies:
-                    if v.url not in seen_urls:
-                        unique_vacancies.append(v)
-                        seen_urls.add(v.url)
+                # Дедупликация по URL на этапе списка
+                seen = set()
+                unique_items = []
+                for item in job_items:
+                    if item["url"] not in seen:
+                        seen.add(item["url"])
+                        unique_items.append(item)
 
-                    return unique_vacancies
+                print(f"📋 [Djinni] Unique vacancies to parse: {len(unique_items)}")
+
+                # Открываем каждую вакансию и забираем полное описание
+                detail_page = await context.new_page()
+                for item in unique_items:
+                    description = await self._get_full_description(detail_page, item["url"])
+                    all_vacancies.append(
+                        VacancyCreate(
+                            title=item["title"],
+                            company=item["company"],
+                            url=item["url"],
+                            description=description or item["title"],
+                            source=JobSource.DJINNI,
+                            salary=item["salary"],
+                        )
+                    )
+                    print(f"✅ [Djinni] Captured: {item['title']}")
+                    await asyncio.sleep(1)  # вежливая задержка
+
+                await detail_page.close()
+
+            except Exception as e:
+                print(f"❌ [Djinni] Scraping error: {e}")
+            finally:
+                await browser.close()
+
+        return all_vacancies
+
+    async def _get_full_description(self, page, url: str) -> str:
+        """Открывает страницу вакансии и извлекает полный текст описания."""
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(1)
+
+            # Основной блок описания на Djinni
+            selectors = [
+                ".vacancy-section",
+                ".job-post__description",
+                "#job-description",
+                "article",
+            ]
+            for selector in selectors:
+                elem = await page.query_selector(selector)
+                if elem:
+                    text = await elem.inner_text()
+                    if text and len(text.strip()) > 50:
+                        return text.strip()[:3000]
+        except Exception as e:
+            print(f"⚠️ [Djinni] Could not get description for {url}: {e}")
+        return ""

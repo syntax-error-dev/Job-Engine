@@ -1,0 +1,39 @@
+{% for job in jobs %}
+<tr class="clickable-row {{ 'pending-row' if job.suitability_score is none }}"
+    onclick="window.location='/vacancy/{{ job.id }}'" style="opacity:{{ '0.7' if job.suitability_score is none else '1' }}">
+    <td>
+        {% if job.suitability_score is not none %}
+            <div class="badge rounded-pill score-badge bg-{{ 'success' if job.suitability_score >= 75 else ('warning' if job.suitability_score >= 50 else 'danger') }}">
+                {{ job.suitability_score }}%
+            </div>
+        {% else %}
+            <span class="badge bg-secondary rounded-pill score-badge">PENDING</span>
+        {% endif %}
+    </td>
+    <td><span class="text-dark fw-bold">{{ job.title }}</span></td>
+    <td><span class="text-muted fw-semibold small">{{ job.company }}</span></td>
+    <td><span class="badge bg-white text-dark source-tag">{{ job.source }}</span></td>
+    <td>
+        <div class="d-flex flex-wrap gap-1">
+            {% for tech in (job.technologies or [])[:3] %}
+                <span class="tech-badge">{{ tech }}</span>
+            {% endfor %}
+            {% if (job.technologies or [])|length > 3 %}
+                <span class="tech-badge">+{{ (job.technologies|length) - 3 }}</span>
+            {% endif %}
+        </div>
+    </td>
+    <td>
+        <p class="small text-secondary mb-0">
+            {{ job.ai_summary if job.ai_summary else "Analyzing vacancy requirements..." }}
+        </p>
+    </td>
+</tr>
+{% endfor %}
+{% if not jobs %}
+<tr>
+    <td colspan="6" class="text-center py-5 text-muted">
+        No vacancies found. Adjust parameters and click <strong>SCAN MARKETS</strong>.
+    </td>
+</tr>
+{% endif %}

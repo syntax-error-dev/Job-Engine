@@ -10,194 +10,367 @@
         .score-badge { width: 65px; font-weight: bold; font-size: 0.9rem; }
         .table-container { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
         .source-tag { font-size: 0.7rem; letter-spacing: 0.5px; border: 1px solid #dee2e6; padding: 4px 8px; }
-        .card-header { font-weight: 600; background-color: #fff; border-bottom: 1px solid #edf2f7; }
         #status-indicator { transition: all 0.3s ease; }
-        .pending-row { opacity: 0.7; }
+        .tech-badge { font-size: 0.7rem; background: #e9ecef; color: #495057; padding: 2px 8px; border-radius: 20px; }
+        .filter-bar { background: white; border-radius: 12px; padding: 16px 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); }
+        tr.clickable-row:hover { cursor: pointer; background-color: #f0f7ff; }
+        .profile-panel { background: #fff8e1; border-left: 4px solid #ffc107; border-radius: 8px; padding: 14px 18px; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-6px); }
+            to   { opacity: 1; }
+        }
+        .row-new { animation: fadeIn 0.4s ease forwards; }
     </style>
 </head>
 <body>
 
-    <div class="container py-5">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="fw-bold text-primary m-0">🕵️ JobEngine <span class="text-secondary fs-5 fw-light text-uppercase">v1.0 Global</span></h1>
+<div class="container py-5">
 
-            <form action="/clear" method="post" onsubmit="return confirm('Delete all saved vacancies?');">
-                <button type="submit" class="btn btn-outline-danger btn-sm fw-bold px-3">🗑️ Clear Database</button>
-            </form>
-        </div>
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="fw-bold text-primary m-0">🕵️ JobEngine <span class="text-secondary fs-5 fw-light text-uppercase">v1.0</span></h1>
+        <form action="/clear" method="post" onsubmit="return confirm('Delete all saved vacancies?');">
+            <button type="submit" class="btn btn-outline-danger btn-sm fw-bold px-3">🗑️ Clear Database</button>
+        </form>
+    </div>
 
-        <div id="status-indicator" class="alert alert-primary d-none mb-4 shadow-sm align-items-center" role="alert">
-            <div class="spinner-border spinner-border-sm me-3" role="status"></div>
-            <div>
-                <strong>Scanning & AI Analysis in progress...</strong>
-                <span class="ms-2 small text-dark">New results will appear in the table automatically.</span>
-            </div>
-        </div>
-
-        <div class="card border-0 shadow-sm mb-5">
-            <div class="card-body p-4">
-                <form id="search-form" action="/run" method="post" class="row g-4">
-                    <div class="col-md-3">
-                        <label class="form-label fw-bold small text-uppercase text-muted">Specialization</label>
-                        <input type="text" name="keyword" class="form-control form-control-lg" placeholder="e.g. Python, React" value="Python" required>
-                    </div>
-
-                    <div class="col-md-2">
-                        <label class="form-label fw-bold small text-uppercase text-muted">Experience</label>
-                        <select name="experience" class="form-select form-select-lg">
-                            <option value="no">0 years</option>
-                            <option value="1y">1 year</option>
-                            <option value="2y">2 years</option>
-                            <option value="3y">3 years</option>
-                            <option value="5y">5+ years</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold small text-uppercase text-muted">Your Core Skills (for AI)</label>
-                        <input type="text" name="skills" class="form-control form-control-lg" placeholder="FastAPI, Docker, English C1">
-                    </div>
-
-                    <div class="col-md-3 d-flex align-items-end">
-                        <button type="submit" class="btn btn-success btn-lg w-100 fw-bold shadow-sm">🚀 SCAN MARKETS</button>
-                    </div>
-
-                    <div class="col-12 border-top pt-3 mt-3">
-                        <label class="form-label fw-bold small text-uppercase text-muted d-block mb-2">Job Sources:</label>
-                        <div class="form-check form-check-inline me-4">
-                            <input class="form-check-input" type="checkbox" name="sources" value="djinni" id="djinni" checked>
-                            <label class="form-check-label fw-semibold" for="djinni">Djinni</label>
-                        </div>
-                        <div class="form-check form-check-inline me-4">
-                            <input class="form-check-input" type="checkbox" name="sources" value="dou" id="dou" checked>
-                            <label class="form-check-label fw-semibold" for="dou">DOU</label>
-                        </div>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="checkbox" name="sources" value="linkedin" id="linkedin" checked>
-                            <label class="form-check-label fw-semibold" for="linkedin">LinkedIn</label>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <div class="table-container">
-            <h4 class="mb-4 fw-bold text-dark">Market Insights</h4>
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead class="table-light">
-                        <tr class="small text-uppercase text-muted">
-                            <th style="width: 100px;">Match</th>
-                            <th>Position</th>
-                            <th>Company</th>
-                            <th>Source</th>
-                            <th style="width: 35%;">AI Verdict</th>
-                        </tr>
-                    </thead>
-                    <tbody id="jobs-table-body">
-                        {% for job in jobs %}
-                        <tr class="{{ 'pending-row' if job.suitability_score is none }}">
-                            <td>
-                                {% if job.suitability_score is not none %}
-                                    <div class="badge rounded-pill score-badge bg-{{ 'success' if job.suitability_score >= 75 else ('warning' if job.suitability_score >= 50 else 'danger') }}">
-                                        {{ job.suitability_score }}%
-                                    </div>
-                                {% else %}
-                                    <span class="badge bg-secondary rounded-pill score-badge">PENDING</span>
-                                {% endif %}
-                            </td>
-
-                            <td>
-                                <a href="{{ job.url }}" target="_blank" class="text-decoration-none text-dark fw-bold">
-                                    {{ job.title }}
-                                </a>
-                            </td>
-
-                            <td><span class="text-muted fw-semibold small">{{ job.company }}</span></td>
-
-                            <td>
-                                <span class="badge bg-white text-dark source-tag text-uppercase">
-                                    {{ job.source }}
-                                </span>
-                            </td>
-
-                            <td>
-                                <p class="small text-secondary mb-0">
-                                    {{ job.ai_summary if job.ai_summary else "Analyzing vacancy requirements..." }}
-                                </p>
-                            </td>
-                        </tr>
-                        {% endfor %}
-
-                        {% if not jobs %}
-                        <tr>
-                            <td colspan="5" class="text-center py-5 text-muted">
-                                No vacancies found. Adjust parameters and click <strong>SCAN MARKETS</strong>.
-                            </td>
-                        </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
+    <!-- Status indicator -->
+    <div id="status-indicator" class="alert alert-primary d-none mb-4 shadow-sm align-items-center" role="alert">
+        <div class="spinner-border spinner-border-sm me-3" role="status"></div>
+        <div>
+            <strong>Scanning & AI Analysis in progress...</strong>
+            <span class="ms-2 small text-dark">Vacancies appear automatically as they are found.</span>
         </div>
     </div>
 
+    <!-- Profile panel -->
+    <div class="profile-panel mb-4">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+            <div>
+                <strong>🧠 Your Profile for AI Analysis</strong>
+                <span class="text-muted small ms-2">— used to calculate match score. Saved in your browser.</span>
+            </div>
+            <button class="btn btn-sm btn-warning fw-bold px-3" onclick="saveProfile()">Save</button>
+        </div>
+        <textarea id="user-profile" class="form-control" rows="2"
+            placeholder="Describe your skills and goals. Example: 2 years Python, FastAPI, PostgreSQL, Docker. Goal: Middle Backend Developer. English B2."></textarea>
+        <div id="profile-saved-msg" class="text-success small mt-1 d-none">✅ Profile saved!</div>
+    </div>
+
+    <!-- Search form -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-4">
+            <form id="search-form" action="/run" method="post" class="row g-4">
+                <div class="col-md-3">
+                    <label class="form-label fw-bold small text-uppercase text-muted">Specialization</label>
+                    <input type="text" name="keyword" class="form-control form-control-lg" placeholder="e.g. Python, React" value="Python" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-bold small text-uppercase text-muted">Experience</label>
+                    <select name="experience" class="form-select form-select-lg">
+                        <option value="no">0 years</option>
+                        <option value="1y">1 year</option>
+                        <option value="2y">2 years</option>
+                        <option value="3y">3 years</option>
+                        <option value="5y">5+ years</option>
+                    </select>
+                </div>
+                <!-- Skills берётся из профиля через JS -->
+                <input type="hidden" name="skills" id="skills-hidden">
+                <div class="col-md-4 d-flex align-items-end">
+                    <div class="w-100">
+                        <label class="form-label fw-bold small text-uppercase text-muted">Skills (from profile)</label>
+                        <div id="skills-preview" class="form-control form-control-lg bg-light text-muted"
+                             style="min-height:48px; font-size:0.85rem; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">
+                            No profile set
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-success btn-lg w-100 fw-bold shadow-sm">🚀 SCAN MARKETS</button>
+                </div>
+                <div class="col-12 border-top pt-3 mt-1">
+                    <label class="form-label fw-bold small text-uppercase text-muted d-block mb-2">Job Sources:</label>
+                    <div class="form-check form-check-inline me-4">
+                        <input class="form-check-input" type="checkbox" name="sources" value="djinni" id="djinni" checked>
+                        <label class="form-check-label fw-semibold" for="djinni">Djinni</label>
+                    </div>
+                    <div class="form-check form-check-inline me-4">
+                        <input class="form-check-input" type="checkbox" name="sources" value="dou" id="dou" checked>
+                        <label class="form-check-label fw-semibold" for="dou">DOU</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" name="sources" value="linkedin" id="linkedin" checked>
+                        <label class="form-check-label fw-semibold" for="linkedin">LinkedIn</label>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar mb-3">
+        <form method="get" action="/" class="d-flex flex-wrap gap-3 align-items-end w-100">
+            <div>
+                <label class="form-label fw-bold small text-uppercase text-muted mb-1">Source</label>
+                <select name="source" class="form-select form-select-sm" style="min-width:120px;" onchange="this.form.submit()">
+                    <option value="" {% if not source %}selected{% endif %}>All</option>
+                    <option value="djinni" {% if source == 'djinni' %}selected{% endif %}>Djinni</option>
+                    <option value="dou" {% if source == 'dou' %}selected{% endif %}>DOU</option>
+                    <option value="linkedin" {% if source == 'linkedin' %}selected{% endif %}>LinkedIn</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label fw-bold small text-uppercase text-muted mb-1">Min Score</label>
+                <select name="min_score" class="form-select form-select-sm" style="min-width:110px;" onchange="this.form.submit()">
+                    <option value="" {% if min_score == '' %}selected{% endif %}>Any</option>
+                    <option value="75" {% if min_score == 75 %}selected{% endif %}>75%+</option>
+                    <option value="50" {% if min_score == 50 %}selected{% endif %}>50%+</option>
+                    <option value="25" {% if min_score == 25 %}selected{% endif %}>25%+</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label fw-bold small text-uppercase text-muted mb-1">Sort by</label>
+                <select name="sort" class="form-select form-select-sm" style="min-width:160px;" onchange="this.form.submit()">
+                    <option value="score_desc" {% if sort == 'score_desc' %}selected{% endif %}>Score ↓</option>
+                    <option value="score_asc" {% if sort == 'score_asc' %}selected{% endif %}>Score ↑</option>
+                    <option value="title_asc" {% if sort == 'title_asc' %}selected{% endif %}>Title A–Z</option>
+                    <option value="company_asc" {% if sort == 'company_asc' %}selected{% endif %}>Company A–Z</option>
+                </select>
+            </div>
+            <div class="ms-auto">
+                <a href="/export/csv?source={{ source }}&min_score={{ min_score }}"
+                   class="btn btn-outline-secondary btn-sm fw-bold">⬇️ Export CSV</a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Table -->
+    <div class="table-container">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold text-dark m-0">Market Insights</h5>
+            <span id="vacancy-count" class="text-muted small">{{ total }} vacanc{{ 'y' if total == 1 else 'ies' }}</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
+                    <tr class="small text-uppercase text-muted">
+                        <th style="width: 90px;">Match</th>
+                        <th>Position</th>
+                        <th>Company</th>
+                        <th>Source</th>
+                        <th>Stack</th>
+                        <th style="width: 30%;">AI Verdict</th>
+                    </tr>
+                </thead>
+                <tbody id="jobs-table-body">
+                    {% for job in jobs %}
+                    <tr class="clickable-row {{ 'pending-row' if job.suitability_score is none }}"
+                        onclick="window.location='/vacancy/{{ job.id }}'">
+                        <td>
+                            {% if job.suitability_score is not none %}
+                                <div class="badge rounded-pill score-badge bg-{{ 'success' if job.suitability_score >= 75 else ('warning' if job.suitability_score >= 50 else 'danger') }}">
+                                    {{ job.suitability_score }}%
+                                </div>
+                            {% else %}
+                                <span class="badge bg-secondary rounded-pill score-badge">PENDING</span>
+                            {% endif %}
+                        </td>
+                        <td><span class="text-dark fw-bold">{{ job.title }}</span></td>
+                        <td><span class="text-muted fw-semibold small">{{ job.company }}</span></td>
+                        <td><span class="badge bg-white text-dark source-tag">{{ job.source }}</span></td>
+                        <td>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for tech in (job.technologies or [])[:3] %}
+                                    <span class="tech-badge">{{ tech }}</span>
+                                {% endfor %}
+                                {% if (job.technologies or [])|length > 3 %}
+                                    <span class="tech-badge">+{{ (job.technologies|length) - 3 }}</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <p class="small text-secondary mb-0">
+                                {{ job.ai_summary if job.ai_summary else "Analyzing vacancy requirements..." }}
+                            </p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not jobs %}
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">
+                            No vacancies found. Adjust parameters and click <strong>SCAN MARKETS</strong>.
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <nav class="mt-3">
+            <ul class="pagination pagination-sm justify-content-center mb-0">
+                <li class="page-item {% if page == 1 %}disabled{% endif %}">
+                    <a class="page-link" href="?page={{ page - 1 }}&source={{ source }}&min_score={{ min_score }}&sort={{ sort }}">‹</a>
+                </li>
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                        <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                    {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ p }}&source={{ source }}&min_score={{ min_score }}&sort={{ sort }}">{{ p }}</a>
+                        </li>
+                    {% elif p == page - 3 or p == page + 3 %}
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+                    <a class="page-link" href="?page={{ page + 1 }}&source={{ source }}&min_score={{ min_score }}&sort={{ sort }}">›</a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+
 <script>
-    const form = document.getElementById('search-form');
-    const statusIndicator = document.getElementById('status-indicator');
-    const tableBody = document.getElementById('jobs-table-body');
-    let refreshInterval = null;
+    const tableBody  = document.getElementById('jobs-table-body');
+    const statusEl   = document.getElementById('status-indicator');
+    const countEl    = document.getElementById('vacancy-count');
+    const rowsMap    = {};  // id → <tr>
 
-    async function updateTable() {
-        try {
-            // Добавляем timestamp, чтобы браузер не кешировал ответ
-            const response = await fetch('/?t=' + Date.now());
-            const html = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const newRows = doc.getElementById('jobs-table-body').innerHTML;
+    // ── Профиль ────────────────────────────────────────────────────────────
+    const PROFILE_KEY = 'jobengine_profile';
 
-            tableBody.innerHTML = newRows;
-
-            // Если в таблице всё еще есть PENDING, продолжаем опрос
-            const hasPending = newRows.includes('PENDING');
-            if (!hasPending && refreshInterval) {
-                console.log("All analyzed. Stopping.");
-                // Не останавливаем сразу, дадим пользователю увидеть результат
-                setTimeout(stopPolling, 5000);
-            }
-        } catch (err) {
-            console.error("Refresh error:", err);
-        }
+    function loadProfile() {
+        const saved = localStorage.getItem(PROFILE_KEY) || '';
+        const ta = document.getElementById('user-profile');
+        if (ta) ta.value = saved;
+        updateSkillsPreview(saved);
     }
 
-    function startPolling() {
-        statusIndicator.classList.remove('d-none');
-        statusIndicator.classList.add('d-flex');
-        if (!refreshInterval) {
-            refreshInterval = setInterval(updateTable, 3000);
-        }
+    function saveProfile() {
+        const val = (document.getElementById('user-profile').value || '').trim();
+        localStorage.setItem(PROFILE_KEY, val);
+        updateSkillsPreview(val);
+        const msg = document.getElementById('profile-saved-msg');
+        if (msg) { msg.classList.remove('d-none'); setTimeout(() => msg.classList.add('d-none'), 2000); }
     }
 
-    function stopPolling() {
-        if (refreshInterval) {
-            clearInterval(refreshInterval);
-            refreshInterval = null;
-        }
-        statusIndicator.classList.replace('d-flex', 'd-none');
+    function updateSkillsPreview(text) {
+        const el = document.getElementById('skills-preview');
+        if (!el) return;
+        el.textContent = text ? text.substring(0, 120) + (text.length > 120 ? '…' : '') : 'No profile set';
+        el.classList.toggle('text-muted', !text);
+        el.classList.toggle('text-dark', !!text);
     }
 
-    form.addEventListener('submit', () => {
-        // Задержка перед началом опроса, чтобы пайплайн успел стартовать
-        setTimeout(startPolling, 2000);
+    // Подставляем профиль в скрытое поле перед отправкой формы
+    document.getElementById('search-form').addEventListener('submit', () => {
+        document.getElementById('skills-hidden').value = localStorage.getItem(PROFILE_KEY) || '';
     });
 
-    // Если при загрузке страницы уже есть PENDING вакансии — запускаем опрос сразу
-    if (document.body.innerHTML.includes('PENDING')) {
-        startPolling();
+    // ── SSE ────────────────────────────────────────────────────────────────
+    function scoreColor(s) {
+        if (s === null || s === undefined) return 'secondary';
+        return s >= 75 ? 'success' : s >= 50 ? 'warning' : 'danger';
     }
+
+    function techBadges(techs) {
+        if (!techs || !techs.length) return '';
+        const vis  = techs.slice(0, 3).map(t => `<span class="tech-badge">${t}</span>`).join('');
+        const more = techs.length > 3 ? `<span class="tech-badge">+${techs.length - 3}</span>` : '';
+        return `<div class="d-flex flex-wrap gap-1">${vis}${more}</div>`;
+    }
+
+    function buildRow(job) {
+        const tr = document.createElement('tr');
+        const pending = job.score === null;
+        tr.className  = 'clickable-row' + (pending ? ' pending-row' : '');
+        tr.style.opacity = pending ? '0.7' : '1';
+        tr.dataset.id = job.id;
+        tr.onclick    = () => window.location = `/vacancy/${job.id}`;
+
+        const scoreTd = pending
+            ? `<span class="badge bg-secondary rounded-pill score-badge">PENDING</span>`
+            : `<div class="badge rounded-pill score-badge bg-${scoreColor(job.score)}">${job.score}%</div>`;
+
+        tr.innerHTML = `
+            <td>${scoreTd}</td>
+            <td><span class="text-dark fw-bold">${job.title}</span></td>
+            <td><span class="text-muted fw-semibold small">${job.company}</span></td>
+            <td><span class="badge bg-white text-dark source-tag">${job.source}</span></td>
+            <td>${techBadges(job.technologies)}</td>
+            <td><p class="small text-secondary mb-0">${job.ai_summary || 'Analyzing vacancy requirements...'}</p></td>`;
+        return tr;
+    }
+
+    function upsertRow(job) {
+        // Убираем заглушку "No vacancies found"
+        const empty = tableBody.querySelector('td[colspan]');
+        if (empty) empty.closest('tr').remove();
+
+        const tr = buildRow(job);
+        if (rowsMap[job.id]) {
+            rowsMap[job.id].replaceWith(tr);   // обновляем строку на месте
+        } else {
+            tr.classList.add('row-new');        // анимация появления
+            tableBody.appendChild(tr);
+        }
+        rowsMap[job.id] = tr;
+
+        if (countEl) {
+            const n = Object.keys(rowsMap).length;
+            countEl.textContent = `${n} vacanc${n === 1 ? 'y' : 'ies'}`;
+        }
+    }
+
+    function startSSE() {
+        statusEl.classList.remove('d-none');
+        statusEl.classList.add('d-flex');
+
+        const es = new EventSource('/api/stream');
+
+        es.onmessage = (e) => {
+            try { upsertRow(JSON.parse(e.data)); } catch(err) { console.error('SSE parse error', err); }
+        };
+
+        es.addEventListener('done', () => {
+            es.close();
+            statusEl.classList.add('d-none');
+            statusEl.classList.remove('d-flex');
+        });
+
+        es.onerror = () => {
+            es.close();
+            statusEl.classList.add('d-none');
+            statusEl.classList.remove('d-flex');
+        };
+    }
+
+    // ── Init ───────────────────────────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', () => {
+        loadProfile();
+
+        // Инициализируем rowsMap из уже отрендеренных сервером строк
+        tableBody.querySelectorAll('tr[data-id]').forEach(tr => {
+            rowsMap[tr.dataset.id] = tr;
+        });
+
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('stream') === '1') {
+            // Пришли после нажатия SCAN — очищаем таблицу и подключаемся к SSE
+            tableBody.innerHTML = '';
+            history.replaceState(null, '', '/');
+            startSSE();
+        } else if (tableBody.innerHTML.includes('PENDING')) {
+            // Есть незавершённые вакансии — подключаемся к SSE
+            startSSE();
+        }
+    });
 </script>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

@@ -12,15 +12,14 @@ class VacancyBase(BaseModel):
 
 
 class VacancyCreate(VacancyBase):
-    # Эти поля заполнит ИИ позже, поэтому ставим None по умолчанию
     technologies: list[str] = Field(default_factory=list)
     ai_summary: str | None = None
     suitability_score: int | None = Field(None, ge=0, le=100)
 
 
 class VacancyResponse(VacancyBase):
-    id: int  # Или UUID
+    id: int
     is_analyzed: bool
 
     class Config:
-        from_attributes = True  # Позволяет Pydantic читать данные из моделей SQLAlchemy
+        from_attributes = True

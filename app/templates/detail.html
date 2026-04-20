@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ job.title }} — JobEngine</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); }
+        .score-circle {
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.4rem; font-weight: 700; color: white;
+        }
+        .tech-badge {
+            background: #e9ecef; color: #495057;
+            padding: 5px 12px; border-radius: 20px;
+            font-size: 0.82rem; font-weight: 500;
+        }
+        .description-block {
+            white-space: pre-wrap;
+            font-size: 0.93rem;
+            line-height: 1.7;
+            color: #343a40;
+        }
+        .source-tag {
+            font-size: 0.7rem; letter-spacing: 0.5px;
+            border: 1px solid #dee2e6; padding: 4px 10px;
+            border-radius: 4px; text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+<div class="container py-5" style="max-width: 860px;">
+
+    <a href="/" class="btn btn-outline-secondary btn-sm mb-4">← Back to list</a>
+
+    <div class="card p-4 mb-4">
+        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+            <div>
+                <h2 class="fw-bold mb-1">{{ job.title }}</h2>
+                <p class="text-muted mb-2 fw-semibold">{{ job.company }}</p>
+                <div class="d-flex gap-2 flex-wrap align-items-center">
+                    <span class="source-tag">{{ job.source }}</span>
+                    {% if job.salary %}
+                        <span class="badge bg-light text-success border border-success fw-semibold">
+                            💰 {{ job.salary }}
+                        </span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if job.suitability_score is not none %}
+                {% set score = job.suitability_score %}
+                {% set color = '#198754' if score >= 75 else ('#ffc107' if score >= 50 else '#dc3545') %}
+                <div class="score-circle flex-shrink-0" style="background: {{ color }};">
+                    {{ score }}%
+                </div>
+            {% else %}
+                <div class="score-circle flex-shrink-0" style="background: #adb5bd; font-size: 0.9rem;">
+                    PENDING
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if job.ai_summary or job.technologies %}
+    <div class="card p-4 mb-4">
+        <h5 class="fw-bold mb-3">🤖 AI Analysis</h5>
+
+        {% if job.ai_summary %}
+            <p class="text-secondary mb-3">{{ job.ai_summary }}</p>
+        {% endif %}
+
+        {% if job.technologies %}
+            <div class="d-flex flex-wrap gap-2">
+                {% for tech in job.technologies %}
+                    <span class="tech-badge">{{ tech }}</span>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="card p-4 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">📋 Full Description</h5>
+            <a href="{{ job.url }}" target="_blank" class="btn btn-success btn-sm fw-bold px-3">
+                Apply →
+            </a>
+        </div>
+        <div class="description-block">{{ job.description }}</div>
+    </div>
+
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

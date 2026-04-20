@@ -9,14 +9,12 @@ class VacancyService:
         self.db = db
 
     async def create_vacancy(self, vacancy_data: VacancyCreate):
-        # Проверяем по URL, чтобы не плодить дубликаты
         existing = await self.db.execute(
             select(Vacancy).where(Vacancy.url == str(vacancy_data.url))
         )
         if existing.scalar_one_or_none():
             return None
 
-        # Превращаем Pydantic-схему в модель SQLAlchemy
         db_vacancy = Vacancy(
             title=vacancy_data.title,
             company=vacancy_data.company,
@@ -32,14 +30,12 @@ class VacancyService:
         return db_vacancy
 
     async def get_unanalyzed_vacancies(self):
-        # Берем вакансии, которые еще не проходили через ИИ
         result = await self.db.execute(
             select(Vacancy).where(Vacancy.is_analyzed == False)
         )
         return result.scalars().all()
 
     async def update_vacancy_ai_data(self, vacancy_id: int, ai_data: dict):
-        # Обновляем поля результатами из ИИ
         result = await self.db.execute(
             select(Vacancy).where(Vacancy.id == vacancy_id)
         )
