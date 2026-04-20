@@ -5,8 +5,16 @@ import re
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 
 load_dotenv()
+
+
+# Строгая схема ответа для Gemini
+class VacancyAnalysis(BaseModel):
+    score: int = Field(description="0-100, where 100 is a perfect match for the candidate's skills")
+    tech_stack: list[str] = Field(description="key technologies mentioned in the vacancy")
+    summary: str = Field(description="brief 2-sentence feedback explaining the score in English")
 
 
 class AIService:
@@ -19,7 +27,7 @@ class AIService:
             self.current_profile = """
             Experience: Frontend Developer, System Administrator.
             Learning: Python (FastAPI, Scraping), English (upper-intermediate).
-            Goal: Junior Python Developer.
+            Goal: Senior Python Developer.
             """
 
     async def analyze_vacancy(self, description: str) -> dict | None:
@@ -32,59 +40,50 @@ class AIService:
 
         Vacancy Description:
         {description}
-
-        Return ONLY a JSON object (no markdown, no explanations) with these exact keys:
-        1. "score": int (0-100, where 100 is a perfect match for the candidate's skills)
-        2. "tech_stack": list of strings (key technologies mentioned in the vacancy)
-        3. "summary": string (brief 2-sentence feedback explaining the score in English)
         """
 
-        models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash-8b"]
-        max_retries = 3
+        models_to_try = ["gemini-3.1-flash-lite-preview"]
+        max_retries = 5
 
         for model_name in models_to_try:
             for attempt in range(max_retries):
                 try:
-                    response = self.client.models.generate_content(
+                    # ИСПОЛЬЗУЕМ АСИНХРОННЫЙ КЛИЕНТ (.aio) И ЖДЕМ (await)
+                    response = await self.client.aio.models.generate_content(
                         model=model_name,
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             response_mime_type="application/json",
+                            response_schema=VacancyAnalysis,  # Заставляем вернуть четкий JSON
+                            temperature=0.1,  # Делаем ответы менее креативными и более стабильными
                         ),
                     )
-                    text_content = response.text.strip()
 
-                    if text_content.startswith("```json"):
-                        text_content = text_content[7:].strip().rstrip("```").strip()
-                    elif text_content.startswith("```"):
-                        text_content = text_content[3:].strip().rstrip("```").strip()
+                    # Парсинг теперь безопасен на 100%
+                    result = json.loads(response.text.strip())
 
-                    result = json.loads(text_content)
-                    result.setdefault("score", 0)
-                    result.setdefault("tech_stack", [])
-                    result.setdefault("summary", "No summary available.")
-                    result["score"] = max(0, min(100, int(result["score"])))
+                    # Финальная нормализация
+                    result["score"] = max(0, min(100, int(result.get("score", 0))))
                     return result
-
-                except json.JSONDecodeError as e:
-                    print(f"AI JSON Parse Error ({model_name}): {e}\nRaw: {text_content[:300]}")
-                    return None
 
                 except Exception as e:
                     err_str = str(e)
+                    # Обработка лимитов API
                     if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
                         match = re.search(r'retry[^\d]*(\d+)', err_str, re.IGNORECASE)
                         wait = int(match.group(1)) + 3 if match else 30
 
                         if attempt < max_retries - 1:
-                            print(f"⏳ [{model_name}] Rate limit, waiting {wait}s (attempt {attempt+1}/{max_retries})...")
+                            print(
+                                f"⏳ [{model_name}] Rate limit, waiting {wait}s (attempt {attempt + 1}/{max_retries})...")
                             await asyncio.sleep(wait)
                         else:
                             print(f"⚠️ [{model_name}] Rate limit after {max_retries} attempts, trying next model...")
                             break
                     else:
-                        print(f"AI Analysis Error ({model_name}): {e}")
-                        return None
+                        print(f"❌ AI Analysis Error ({model_name}): {e}")
+                        # При другой ошибке пробуем следующую модель
+                        break
 
         print("❌ All models exhausted, skipping vacancy.")
         return None

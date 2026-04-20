@@ -1,6 +1,8 @@
+import logging
 from abc import abstractmethod, ABC
 from playwright.async_api import async_playwright
 
+logger = logging.getLogger(__name__)
 
 class BaseParser(ABC):
     @abstractmethod
@@ -18,7 +20,7 @@ class BaseParser(ABC):
                 await page.goto(url, wait_until="domcontentloaded", timeout=60000)
                 content = await page.content()
             except Exception as e:
-                print(f"[BaseParser] Error loading {url}: {e}")
+                logger.error(f"[BaseParser] Error loading {url}: {e}")
                 content = ""
             finally:
                 await browser.close()

@@ -3,7 +3,6 @@ from sqlalchemy.future import select
 from app.models.vacancy import Vacancy
 from app.schemas.vacancy import VacancyCreate
 
-
 class VacancyService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -28,6 +27,34 @@ class VacancyService:
         await self.db.commit()
         await self.db.refresh(db_vacancy)
         return db_vacancy
+
+    async def bulk_create_vacancies(self, vacancies: list[VacancyCreate]) -> int:
+        if not vacancies:
+            return 0
+
+        urls = [str(v.url) for v in vacancies]
+        existing_urls_result = await self.db.execute(
+            select(Vacancy.url).where(Vacancy.url.in_(urls))
+        )
+        existing_urls = set(existing_urls_result.scalars().all())
+
+        new_vacancies = [
+            Vacancy(
+                title=v.title,
+                company=v.company,
+                url=str(v.url),
+                description=v.description,
+                source=v.source,
+                salary=v.salary
+            )
+            for v in vacancies if str(v.url) not in existing_urls
+        ]
+
+        if new_vacancies:
+            self.db.add_all(new_vacancies)
+            await self.db.commit()
+            return len(new_vacancies)
+        return 0
 
     async def get_unanalyzed_vacancies(self):
         result = await self.db.execute(
