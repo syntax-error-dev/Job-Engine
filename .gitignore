@@ -1,30 +1,42 @@
+# Environment
+.env
+!.env.example
+
+# Database
+*.db
+*.sqlite
+data/
+
 # Python
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
 .venv/
 env/
-venv/
-ENV/
 
-# Environment variables (КРИТИЧЕСКО: твои токены и пароли)
-.env
-.env.*
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Базы данных (чтобы не пушить локальные тесты)
-*.sqlite
-*.sqlite3
-jobs.db
-identifier.sqlite
-
-# IDE - PyCharm / VSCode
+# IDE
 .idea/
 .vscode/
 *.swp
+*.swo
 
-# Docker
-.docker/
+# OS
+.DS_Store
+Thumbs.db
 
-# Playwright (логи и браузеры, если они скачаются в папку проекта)
-/test-results/
-/pw-browser/
+# Playwright
+playwright/.local-browsers/

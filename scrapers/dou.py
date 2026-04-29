@@ -8,12 +8,20 @@ from scrapers.base import BaseParser
 
 logger = logging.getLogger(__name__)
 
+
 class DOUScraper(BaseParser):
-    def __init__(self, keyword="Python", exp="no"):
+    def __init__(self, keyword="Python", exp="no", remote=False, city=""):
         super().__init__()
         self.keyword = keyword
         self.exp = exp
-        self.base_url = f"https://jobs.dou.ua/vacancies/?category={self.keyword}"
+
+        url = f"https://jobs.dou.ua/vacancies/?category={self.keyword}"
+        if remote:
+            url += "&remote"
+        elif city:
+            url += f"&city={city}"
+
+        self.base_url = url
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Referer": "https://jobs.dou.ua/"
@@ -51,14 +59,14 @@ class DOUScraper(BaseParser):
                     company = company_elem.get_text(strip=True) if company_elem else "Unknown Company"
                     salary_elem = item.select_one("span.salary")
                     salary = salary_elem.get_text(strip=True) if salary_elem else None
-                    desc_elem = item.select_one("div.sh-info")
-                    description = desc_elem.get_text(strip=True) if desc_elem else ""
+
+                    description = await self._get_full_description(url)
 
                     vacancies.append(VacancyCreate(
                         title=title,
                         company=company,
                         url=url,
-                        description=description,
+                        description=description or title,
                         source=JobSource.DOU,
                         salary=salary
                     ))
@@ -68,13 +76,13 @@ class DOUScraper(BaseParser):
 
             return vacancies
 
-    async def get_full_description(self, url: str) -> str:
+    async def _get_full_description(self, url: str) -> str:
         async with httpx.AsyncClient(headers=self.headers) as client:
             try:
                 res = await self.fetch_page(client, url)
                 soup = BeautifulSoup(res.text, "html.parser")
                 full_text = soup.select_one("div.l-vacancy") or soup.select_one(".b-typo")
-                return full_text.get_text(strip=True) if full_text else ""
+                return full_text.get_text(strip=True)[:3000] if full_text else ""
             except httpx.HTTPError as e:
                 logger.error("Error fetching description %s: %s", url, e)
         return ""

@@ -3,11 +3,12 @@ import csv
 import io
 import json
 import logging
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 from fastapi import FastAPI, Depends, Request, Form, Query, BackgroundTasks
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import RedirectResponse, StreamingResponse, HTMLResponse
+from fastapi.responses import RedirectResponse, StreamingResponse, JSONResponse
 from sqlalchemy import delete, asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -19,7 +20,6 @@ from test_parser import run_all_scrapers
 from analyze_jobs import start_analysis
 
 import sys
-import asyncio
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -27,28 +27,26 @@ if sys.platform == "win32":
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Smart JobEngine Admin")
+app = FastAPI(title="Smart JobEngine", version="1.0.0")
 templates = Jinja2Templates(directory="app/templates")
 
 PAGE_SIZE = 20
 
 
-# --- Фоновая задача для пайплайна ---
-async def run_pipeline_task(keyword: str, experience: str, skills: str, sources: List[str]):
-    logger.info(f"🤖 === STARTING PIPELINE: {keyword} ===")
+@app.get("/health")
+async def health():
+    return JSONResponse({"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()})
+
+
+async def run_pipeline_task(keyword, experience, skills, sources, remote, city):
+    logger.info(f"=== STARTING PIPELINE: {keyword} ===")
     try:
-        # 1. Запускаем скраперы
-        await run_all_scrapers(
-            keyword=keyword,
-            exp=experience,
-            selected_sources=sources
-        )
-        # 2. Запускаем анализ
+        await run_all_scrapers(keyword=keyword, exp=experience,
+                               selected_sources=sources, remote=remote, city=city)
         await start_analysis(user_skills=skills)
-        logger.info("✅ PIPELINE FINISHED SUCCESSFULLY.")
+        logger.info("PIPELINE FINISHED SUCCESSFULLY.")
     except Exception as e:
-        # Теперь, если ИИ упадет, мы УВИДИМ это в консоли
-        logger.error(f"❌ PIPELINE FAILED: {e}", exc_info=True)
+        logger.error(f"PIPELINE FAILED: {e}", exc_info=True)
 
 
 @app.get("/")
@@ -59,59 +57,69 @@ async def index(
         source: Optional[str] = Query(None),
         min_score: Optional[str] = Query(None),
         sort: str = Query("score_desc"),
+        tech: Optional[str] = Query(None),
+        date_filter: Optional[str] = Query(None),
 ):
     min_score_int: Optional[int] = None
     if min_score and min_score.strip().isdigit():
         min_score_int = int(min_score)
-    query = select(Vacancy)
 
+    query = select(Vacancy)
     if source:
         query = query.where(Vacancy.source == source)
     if min_score_int is not None:
         query = query.where(Vacancy.suitability_score >= min_score_int)
 
-    sort_map = {
-        "score_desc": desc(Vacancy.suitability_score),
-        "score_asc": asc(Vacancy.suitability_score),
-        "title_asc": asc(Vacancy.title),
-        "company_asc": asc(Vacancy.company),
-    }
-    order = sort_map.get(sort, desc(Vacancy.suitability_score))
-    query = query.order_by(order)
+    DATE_CUTOFFS = {"today": 1, "week": 7, "month": 30}
+    if date_filter in DATE_CUTOFFS:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=DATE_CUTOFFS[date_filter])
+        query = query.where(Vacancy.scraped_at >= cutoff)
 
-    count_result = await db.execute(query)
-    all_jobs = count_result.scalars().all()
+    sort_map = {
+        "score_desc":  desc(Vacancy.suitability_score),
+        "score_asc":   asc(Vacancy.suitability_score),
+        "title_asc":   asc(Vacancy.title),
+        "company_asc": asc(Vacancy.company),
+        "date_desc":   desc(Vacancy.scraped_at),
+        "date_asc":    asc(Vacancy.scraped_at),
+    }
+    query = query.order_by(sort_map.get(sort, desc(Vacancy.suitability_score)))
+
+    result = await db.execute(query)
+    all_jobs = result.scalars().all()
+
+    if tech:
+        tech_lower = tech.lower()
+        all_jobs = [j for j in all_jobs
+                    if any(tech_lower in t.lower() for t in (j.technologies or []))]
+
     total = len(all_jobs)
     total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
     page = min(page, total_pages)
+    paged_jobs = all_jobs[(page - 1) * PAGE_SIZE: page * PAGE_SIZE]
 
-    offset = (page - 1) * PAGE_SIZE
-    paged_jobs = all_jobs[offset: offset + PAGE_SIZE]
+    tech_result = await db.execute(select(Vacancy.technologies))
+    all_techs = sorted(set(
+        t for row in tech_result.scalars().all() for t in (row or [])
+    ))
 
     return templates.TemplateResponse("index.html", {
-        "request": request,
-        "jobs": paged_jobs,
-        "page": page,
-        "total_pages": total_pages,
-        "total": total,
-        "source": source or "",
-        "min_score": min_score_int if min_score_int is not None else "",
-        "sort": sort,
+        "request": request, "jobs": paged_jobs,
+        "page": page, "total_pages": total_pages, "total": total,
+        "source": source or "", "min_score": min_score_int if min_score_int is not None else "",
+        "sort": sort, "tech": tech or "", "all_techs": all_techs,
+        "date_filter": date_filter or "",
     })
 
 
 @app.get("/api/stream")
 async def stream_vacancies(request: Request):
-    """SSE endpoint."""
-
     async def event_generator():
         seen_ids = {}
         idle_ticks = 0
-
         while True:
             if await request.is_disconnected():
                 break
-
             try:
                 async with async_session() as session:
                     result = await session.execute(
@@ -123,48 +131,29 @@ async def stream_vacancies(request: Request):
                 for job in jobs:
                     prev = seen_ids.get(job.id)
                     curr = (job.suitability_score, job.is_analyzed)
-
                     if prev != curr:
                         seen_ids[job.id] = curr
                         changed = True
-
                         payload = json.dumps({
-                            "id": job.id,
-                            "title": job.title,
-                            "company": job.company,
-                            "source": job.source,
-                            "salary": job.salary,
-                            "score": job.suitability_score,
-                            "is_analyzed": job.is_analyzed,
+                            "id": job.id, "title": job.title, "company": job.company,
+                            "source": job.source, "salary": job.salary,
+                            "score": job.suitability_score, "is_analyzed": job.is_analyzed,
                             "ai_summary": job.ai_summary or "",
                             "technologies": job.technologies or [],
+                            "scraped_at": job.scraped_at.strftime("%d %b %Y") if job.scraped_at else "",
                         }, ensure_ascii=False)
-
                         yield f"data: {payload}\n\n"
 
-                if changed:
-                    idle_ticks = 0
-                else:
-                    idle_ticks += 1
-
-                if idle_ticks >= 20:
+                idle_ticks = 0 if changed else idle_ticks + 1
+                if idle_ticks >= 120:
                     yield "event: done\ndata: done\n\n"
                     break
-
             except Exception as e:
                 logger.error(f"SSE Error: {e}")
-
-            # Увеличил задержку, чтобы база успевала "дышать" и записывать данные от ИИ
             await asyncio.sleep(2.5)
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        }
-    )
+    return StreamingResponse(event_generator(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.get("/vacancy/{vacancy_id}")
@@ -177,15 +166,10 @@ async def vacancy_detail(vacancy_id: int, request: Request, db: AsyncSession = D
 
 
 @app.get("/export/csv")
-async def export_csv(
-        db: AsyncSession = Depends(get_db),
-        source: Optional[str] = Query(None),
-        min_score: Optional[str] = Query(None),
-):
-    min_score_int: Optional[int] = None
-    if min_score and min_score.strip().isdigit():
-        min_score_int = int(min_score)
-
+async def export_csv(db: AsyncSession = Depends(get_db),
+                     source: Optional[str] = Query(None),
+                     min_score: Optional[str] = Query(None)):
+    min_score_int = int(min_score) if min_score and min_score.strip().isdigit() else None
     query = select(Vacancy).order_by(desc(Vacancy.suitability_score))
     if source:
         query = query.where(Vacancy.source == source)
@@ -197,34 +181,30 @@ async def export_csv(
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["ID", "Title", "Company", "Source", "Score", "Salary", "Technologies", "AI Summary", "URL"])
+    writer.writerow(["ID", "Title", "Company", "Source", "Score", "Salary",
+                     "Technologies", "AI Summary", "Scraped At", "URL"])
     for job in jobs:
         writer.writerow([
             job.id, job.title, job.company, job.source,
             job.suitability_score, job.salary or "",
-            ", ".join(job.technologies or []),
-                                   job.ai_summary or "", job.url,
+            ", ".join(job.technologies or []), job.ai_summary or "",
+            job.scraped_at.strftime("%Y-%m-%d %H:%M") if job.scraped_at else "",
+            job.url,
         ])
-
     output.seek(0)
-    return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=vacancies.csv"}
-    )
+    return StreamingResponse(iter([output.getvalue()]), media_type="text/csv",
+                             headers={"Content-Disposition": "attachment; filename=vacancies.csv"})
 
 
-# --- ИЗМЕНЕНИЯ ЗДЕСЬ: Используем BackgroundTasks вместо subprocess ---
 @app.post("/run")
 async def run_pipeline(
         background_tasks: BackgroundTasks,
-        keyword: str = Form(...),
-        experience: str = Form(...),
-        skills: str = Form(""),
-        sources: List[str] = Form(["djinni", "dou", "linkedin"])
+        keyword: str = Form(...), experience: str = Form(...),
+        skills: str = Form(""), sources: List[str] = Form(["djinni", "dou", "linkedin"]),
+        work_format: str = Form("any"), city: str = Form(""),
 ):
-    # Добавляем задачу в фон. FastAPI сам запустит её и не заблокирует ответ
-    background_tasks.add_task(run_pipeline_task, keyword, experience, skills, sources)
+    background_tasks.add_task(run_pipeline_task, keyword, experience,
+                              skills, sources, work_format == "remote", city)
     return RedirectResponse(url="/?stream=1", status_code=303)
 
 

@@ -5,12 +5,18 @@ from app.schemas.enums import JobSource
 
 
 class LinkedInScraper:
-    def __init__(self, keyword="Python"):
+    def __init__(self, keyword="Python", remote=False, city=""):
         self.keyword = keyword
-        self.url = (
+
+        location = city if city else "Ukraine"
+        url = (
             f"https://www.linkedin.com/jobs/search/"
-            f"?keywords={self.keyword}&location=Ukraine&f_TPR=r604800"  # за последнюю неделю
+            f"?keywords={keyword}&location={location}&f_TPR=r604800"
         )
+        if remote:
+            url += "&f_WT=2"
+
+        self.url = url
 
     async def scrape(self) -> list[VacancyCreate]:
         async with async_playwright() as p:
@@ -60,7 +66,6 @@ class LinkedInScraper:
                     if not url:
                         continue
 
-                    # Получаем полное описание вакансии
                     description = await self._get_full_description(detail_page, url)
 
                     vacancies.append(
@@ -74,7 +79,7 @@ class LinkedInScraper:
                         )
                     )
                     print(f"✅ [LinkedIn] Captured: {title}")
-                    await asyncio.sleep(2)  # LinkedIn активно блокирует — чуть медленнее
+                    await asyncio.sleep(2)
 
                 except Exception as e:
                     print(f"⚠️ [LinkedIn] Error parsing item: {e}")
@@ -84,12 +89,10 @@ class LinkedInScraper:
             return vacancies
 
     async def _get_full_description(self, page, url: str) -> str:
-        """Открывает страницу вакансии LinkedIn и извлекает описание."""
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(2)
 
-            # Пробуем развернуть описание (кнопка "See more")
             try:
                 see_more = await page.query_selector(
                     "button.show-more-less-html__button--more"

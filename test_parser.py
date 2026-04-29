@@ -10,21 +10,26 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-async def run_all_scrapers(keyword="Python", exp="no", selected_sources=None):
+async def run_all_scrapers(
+    keyword="Python",
+    exp="no",
+    selected_sources=None,
+    remote=False,
+    city="",
+):
     if selected_sources is None:
         selected_sources = ["djinni", "dou", "linkedin"]
 
     scrapers = []
     if "djinni" in selected_sources:
-        scrapers.append(DjinniScraper(keyword=keyword, exp_level=exp))
+        scrapers.append(DjinniScraper(keyword=keyword, exp_level=exp, remote=remote, city=city))
     if "dou" in selected_sources:
-        scrapers.append(DOUScraper(keyword=keyword, exp=exp))
+        scrapers.append(DOUScraper(keyword=keyword, exp=exp, remote=remote, city=city))
     if "linkedin" in selected_sources:
-        scrapers.append(LinkedInScraper(keyword=keyword))
+        scrapers.append(LinkedInScraper(keyword=keyword, remote=remote, city=city))
 
     all_jobs = []
 
-    # ❗️ ЗАПУСКАЕМ ПО ОЧЕРЕДИ, чтобы браузеры не конфликтовали
     for scraper in scrapers:
         name = scraper.__class__.__name__
         logger.info("🚀 Starting %s...", name)
@@ -36,13 +41,13 @@ async def run_all_scrapers(keyword="Python", exp="no", selected_sources=None):
             else:
                 logger.warning("⚠️ [%s] Returned non-list result: %s", name, res)
         except Exception as e:
-            # Теперь, если Playwright упадет, мы точно увидим почему
-            logger.error("❌ [%s] Scraper failed with error: %s", name, e, exc_info=True)
+            logger.error("❌ [%s] Scraper failed: %s", name, e, exc_info=True)
 
     async with async_session() as session:
         service = VacancyService(session)
         new_count = await service.bulk_create_vacancies(all_jobs)
         logger.info("Total new vacancies added: %d", new_count)
+
 
 if __name__ == "__main__":
     asyncio.run(run_all_scrapers())

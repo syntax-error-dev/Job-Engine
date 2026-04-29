@@ -1,17 +1,25 @@
 import asyncio
+import re
 from playwright.async_api import async_playwright
 from app.schemas.vacancy import VacancyCreate
 from app.schemas.enums import JobSource
 
 
 class DjinniScraper:
-    def __init__(self, keyword="Python", exp_level="no"):
+    def __init__(self, keyword="Python", exp_level="no", remote=False, city=""):
         self.keyword = keyword
         self.exp_level = exp_level
-        self.base_url = (
+
+        url = (
             f"https://djinni.co/jobs/?primary_keyword={keyword}"
             f"&exp_level={exp_level}&sort=date&lang=en"
         )
+        if remote:
+            url += "&remote=true"
+        elif city:
+            url += f"&location={city}"
+
+        self.base_url = url
 
     async def scrape(self) -> list[VacancyCreate]:
         all_vacancies = []
@@ -19,7 +27,7 @@ class DjinniScraper:
         async with async_playwright() as p:
             print(f"🔗 [Djinni] Starting browser for: {self.keyword}...")
 
-            browser = await p.chromium.launch(headless=True)  # headless для production
+            browser = await p.chromium.launch(headless=True)
             context = await browser.new_context(
                 viewport={"width": 1920, "height": 1080},
                 user_agent=(
@@ -41,7 +49,6 @@ class DjinniScraper:
                 )
                 print(f"🔍 Found {len(job_links)} job links")
 
-                # Собираем базовые данные со списка
                 job_items = []
                 for link in job_links:
                     url = await link.get_attribute("href")
@@ -51,13 +58,10 @@ class DjinniScraper:
                         url = f"https://djinni.co{url}"
                     url = url.split("?")[0]
 
-                    # Пропускаем служебные ссылки — только реальные вакансии вида /jobs/12345-slug/
-                    import re
                     if not re.search(r"/jobs/\d+", url):
                         continue
 
                     title = (await link.inner_text()).strip()
-                    # inner_text может захватить компанию/зарплату из родителя — берём только первую строку
                     title = title.split("\n")[0].strip()
                     if not title:
                         continue
@@ -89,7 +93,6 @@ class DjinniScraper:
                         "salary": salary,
                     })
 
-                # Дедупликация по URL на этапе списка
                 seen = set()
                 unique_items = []
                 for item in job_items:
@@ -99,7 +102,6 @@ class DjinniScraper:
 
                 print(f"📋 [Djinni] Unique vacancies to parse: {len(unique_items)}")
 
-                # Открываем каждую вакансию и забираем полное описание
                 detail_page = await context.new_page()
                 for item in unique_items:
                     description = await self._get_full_description(detail_page, item["url"])
@@ -114,7 +116,7 @@ class DjinniScraper:
                         )
                     )
                     print(f"✅ [Djinni] Captured: {item['title']}")
-                    await asyncio.sleep(1)  # вежливая задержка
+                    await asyncio.sleep(1)
 
                 await detail_page.close()
 
@@ -126,12 +128,10 @@ class DjinniScraper:
         return all_vacancies
 
     async def _get_full_description(self, page, url: str) -> str:
-        """Открывает страницу вакансии и извлекает полный текст описания."""
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(1)
 
-            # Основной блок описания на Djinni
             selectors = [
                 ".vacancy-section",
                 ".job-post__description",

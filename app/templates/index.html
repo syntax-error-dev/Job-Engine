@@ -15,6 +15,7 @@
         .filter-bar { background: white; border-radius: 12px; padding: 16px 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.04); }
         tr.clickable-row:hover { cursor: pointer; background-color: #f0f7ff; }
         .profile-panel { background: #fff8e1; border-left: 4px solid #ffc107; border-radius: 8px; padding: 14px 18px; }
+        #city-field { transition: opacity 0.2s; }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(-6px); }
             to   { opacity: 1; }
@@ -60,10 +61,13 @@
     <!-- Search form -->
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-4">
-            <form id="search-form" action="/run" method="post" class="row g-4">
+            <form id="search-form" action="/run" method="post" class="row g-3">
+
+                <!-- Row 1: keyword + experience + work format + city -->
                 <div class="col-md-3">
                     <label class="form-label fw-bold small text-uppercase text-muted">Specialization</label>
-                    <input type="text" name="keyword" class="form-control form-control-lg" placeholder="e.g. Python, React" value="Python" required>
+                    <input type="text" name="keyword" class="form-control form-control-lg"
+                           placeholder="e.g. Python, React" value="Python" required>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label fw-bold small text-uppercase text-muted">Experience</label>
@@ -75,9 +79,23 @@
                         <option value="5y">5+ years</option>
                     </select>
                 </div>
-                <!-- Skills берётся из профиля через JS -->
+                <div class="col-md-2">
+                    <label class="form-label fw-bold small text-uppercase text-muted">Work Format</label>
+                    <select name="work_format" id="work-format" class="form-select form-select-lg"
+                            onchange="toggleCity(this.value)">
+                        <option value="any">Any</option>
+                        <option value="remote">Remote only</option>
+                        <option value="office">Office / City</option>
+                    </select>
+                </div>
+                <div class="col-md-2" id="city-field" style="opacity:0; pointer-events:none;">
+                    <label class="form-label fw-bold small text-uppercase text-muted">City</label>
+                    <input type="text" name="city" class="form-control form-control-lg" placeholder="e.g. Kyiv">
+                </div>
+
+                <!-- Skills hidden + preview -->
                 <input type="hidden" name="skills" id="skills-hidden">
-                <div class="col-md-4 d-flex align-items-end">
+                <div class="col-md-3 d-flex align-items-end" id="skills-col">
                     <div class="w-100">
                         <label class="form-label fw-bold small text-uppercase text-muted">Skills (from profile)</label>
                         <div id="skills-preview" class="form-control form-control-lg bg-light text-muted"
@@ -86,24 +104,33 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3 d-flex align-items-end">
-                    <button type="submit" class="btn btn-success btn-lg w-100 fw-bold shadow-sm">🚀 SCAN MARKETS</button>
+
+                <!-- Row 2: sources + button -->
+                <div class="col-12 border-top pt-3">
+                    <div class="d-flex flex-wrap align-items-center gap-4">
+                        <div>
+                            <label class="form-label fw-bold small text-uppercase text-muted d-block mb-2">Job Sources:</label>
+                            <div class="d-flex gap-4">
+                                <div class="form-check form-check-inline m-0">
+                                    <input class="form-check-input" type="checkbox" name="sources" value="djinni" id="djinni" checked>
+                                    <label class="form-check-label fw-semibold" for="djinni">Djinni</label>
+                                </div>
+                                <div class="form-check form-check-inline m-0">
+                                    <input class="form-check-input" type="checkbox" name="sources" value="dou" id="dou" checked>
+                                    <label class="form-check-label fw-semibold" for="dou">DOU</label>
+                                </div>
+                                <div class="form-check form-check-inline m-0">
+                                    <input class="form-check-input" type="checkbox" name="sources" value="linkedin" id="linkedin" checked>
+                                    <label class="form-check-label fw-semibold" for="linkedin">LinkedIn</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="ms-auto">
+                            <button type="submit" class="btn btn-success btn-lg fw-bold shadow-sm px-5">🚀 SCAN MARKETS</button>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-12 border-top pt-3 mt-1">
-                    <label class="form-label fw-bold small text-uppercase text-muted d-block mb-2">Job Sources:</label>
-                    <div class="form-check form-check-inline me-4">
-                        <input class="form-check-input" type="checkbox" name="sources" value="djinni" id="djinni" checked>
-                        <label class="form-check-label fw-semibold" for="djinni">Djinni</label>
-                    </div>
-                    <div class="form-check form-check-inline me-4">
-                        <input class="form-check-input" type="checkbox" name="sources" value="dou" id="dou" checked>
-                        <label class="form-check-label fw-semibold" for="dou">DOU</label>
-                    </div>
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" name="sources" value="linkedin" id="linkedin" checked>
-                        <label class="form-check-label fw-semibold" for="linkedin">LinkedIn</label>
-                    </div>
-                </div>
+
             </form>
         </div>
     </div>
@@ -111,15 +138,6 @@
     <!-- Filter bar -->
     <div class="filter-bar mb-3">
         <form method="get" action="/" class="d-flex flex-wrap gap-3 align-items-end w-100">
-            <div>
-                <label class="form-label fw-bold small text-uppercase text-muted mb-1">Source</label>
-                <select name="source" class="form-select form-select-sm" style="min-width:120px;" onchange="this.form.submit()">
-                    <option value="" {% if not source %}selected{% endif %}>All</option>
-                    <option value="djinni" {% if source == 'djinni' %}selected{% endif %}>Djinni</option>
-                    <option value="dou" {% if source == 'dou' %}selected{% endif %}>DOU</option>
-                    <option value="linkedin" {% if source == 'linkedin' %}selected{% endif %}>LinkedIn</option>
-                </select>
-            </div>
             <div>
                 <label class="form-label fw-bold small text-uppercase text-muted mb-1">Min Score</label>
                 <select name="min_score" class="form-select form-select-sm" style="min-width:110px;" onchange="this.form.submit()">
@@ -130,14 +148,42 @@
                 </select>
             </div>
             <div>
+                <label class="form-label fw-bold small text-uppercase text-muted mb-1">Technology</label>
+                <input list="tech-list" name="tech" value="{{ tech }}"
+                       class="form-control form-control-sm" style="min-width:140px;"
+                       placeholder="e.g. FastAPI"
+                       onchange="this.form.submit()">
+                <datalist id="tech-list">
+                    {% for t in all_techs %}
+                        <option value="{{ t }}">
+                    {% endfor %}
+                </datalist>
+            </div>
+            <div>
                 <label class="form-label fw-bold small text-uppercase text-muted mb-1">Sort by</label>
                 <select name="sort" class="form-select form-select-sm" style="min-width:160px;" onchange="this.form.submit()">
                     <option value="score_desc" {% if sort == 'score_desc' %}selected{% endif %}>Score ↓</option>
                     <option value="score_asc" {% if sort == 'score_asc' %}selected{% endif %}>Score ↑</option>
                     <option value="title_asc" {% if sort == 'title_asc' %}selected{% endif %}>Title A–Z</option>
                     <option value="company_asc" {% if sort == 'company_asc' %}selected{% endif %}>Company A–Z</option>
+                    <option value="date_desc" {% if sort == 'date_desc' %}selected{% endif %}>Newest first</option>
+                    <option value="date_asc" {% if sort == 'date_asc' %}selected{% endif %}>Oldest first</option>
                 </select>
             </div>
+            <div>
+                <label class="form-label fw-bold small text-uppercase text-muted mb-1">Added</label>
+                <select name="date_filter" class="form-select form-select-sm" style="min-width:110px;" onchange="this.form.submit()">
+                    <option value="" {% if date_filter == '' %}selected{% endif %}>Any time</option>
+                    <option value="today" {% if date_filter == 'today' %}selected{% endif %}>Last 24h</option>
+                    <option value="week" {% if date_filter == 'week' %}selected{% endif %}>Last week</option>
+                    <option value="month" {% if date_filter == 'month' %}selected{% endif %}>Last month</option>
+                </select>
+            </div>
+            {% if tech or min_score != '' or date_filter %}
+            <div class="d-flex align-items-end">
+                <a href="/" class="btn btn-outline-secondary btn-sm">✕ Clear filters</a>
+            </div>
+            {% endif %}
             <div class="ms-auto">
                 <a href="/export/csv?source={{ source }}&min_score={{ min_score }}"
                    class="btn btn-outline-secondary btn-sm fw-bold">⬇️ Export CSV</a>
@@ -160,12 +206,14 @@
                         <th>Company</th>
                         <th>Source</th>
                         <th>Stack</th>
-                        <th style="width: 30%;">AI Verdict</th>
+                        <th>Scraped</th>
+                        <th style="width: 28%;">AI Verdict</th>
                     </tr>
                 </thead>
                 <tbody id="jobs-table-body">
                     {% for job in jobs %}
                     <tr class="clickable-row {{ 'pending-row' if job.suitability_score is none }}"
+                        data-id="{{ job.id }}"
                         onclick="window.location='/vacancy/{{ job.id }}'">
                         <td>
                             {% if job.suitability_score is not none %}
@@ -189,6 +237,7 @@
                                 {% endif %}
                             </div>
                         </td>
+                        <td><span class="text-muted small">{{ job.scraped_at.strftime('%d %b') if job.scraped_at else '' }}</span></td>
                         <td>
                             <p class="small text-secondary mb-0">
                                 {{ job.ai_summary if job.ai_summary else "Analyzing vacancy requirements..." }}
@@ -212,21 +261,21 @@
         <nav class="mt-3">
             <ul class="pagination pagination-sm justify-content-center mb-0">
                 <li class="page-item {% if page == 1 %}disabled{% endif %}">
-                    <a class="page-link" href="?page={{ page - 1 }}&source={{ source }}&min_score={{ min_score }}&sort={{ sort }}">‹</a>
+                    <a class="page-link" href="?page={{ page - 1 }}&source={{ source }}&min_score={{ min_score }}&sort={{ sort }}&tech={{ tech }}">‹</a>
                 </li>
                 {% for p in range(1, total_pages + 1) %}
                     {% if p == page %}
                         <li class="page-item active"><span class="page-link">{{ p }}</span></li>
                     {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ p }}&source={{ source }}&min_score={{ min_score }}&sort={{ sort }}">{{ p }}</a>
+                            <a class="page-link" href="?page={{ p }}&source={{ source }}&min_score={{ min_score }}&sort={{ sort }}&tech={{ tech }}">{{ p }}</a>
                         </li>
                     {% elif p == page - 3 or p == page + 3 %}
                         <li class="page-item disabled"><span class="page-link">…</span></li>
                     {% endif %}
                 {% endfor %}
                 <li class="page-item {% if page == total_pages %}disabled{% endif %}">
-                    <a class="page-link" href="?page={{ page + 1 }}&source={{ source }}&min_score={{ min_score }}&sort={{ sort }}">›</a>
+                    <a class="page-link" href="?page={{ page + 1 }}&source={{ source }}&min_score={{ min_score }}&sort={{ sort }}&tech={{ tech }}">›</a>
                 </li>
             </ul>
         </nav>
@@ -238,7 +287,20 @@
     const tableBody  = document.getElementById('jobs-table-body');
     const statusEl   = document.getElementById('status-indicator');
     const countEl    = document.getElementById('vacancy-count');
-    const rowsMap    = {};  // id → <tr>
+    const rowsMap    = {};
+
+    // ── Work format toggle ─────────────────────────────────────────────────
+    function toggleCity(val) {
+        const cityField = document.getElementById('city-field');
+        const skillsCol = document.getElementById('skills-col');
+        if (val === 'office') {
+            cityField.style.opacity = '1';
+            cityField.style.pointerEvents = 'auto';
+        } else {
+            cityField.style.opacity = '0';
+            cityField.style.pointerEvents = 'none';
+        }
+    }
 
     // ── Профиль ────────────────────────────────────────────────────────────
     const PROFILE_KEY = 'jobengine_profile';
@@ -266,8 +328,44 @@
         el.classList.toggle('text-dark', !!text);
     }
 
-    // Подставляем профиль в скрытое поле перед отправкой формы
+    // ── Сохранение параметров поиска ──────────────────────────────────────
+    const SEARCH_KEY = 'jobengine_search';
+
+    function saveSearchParams() {
+        const form = document.getElementById('search-form');
+        const data = {
+            keyword:     form.querySelector('[name=keyword]').value,
+            experience:  form.querySelector('[name=experience]').value,
+            work_format: form.querySelector('[name=work_format]').value,
+            city:        form.querySelector('[name=city]').value,
+            sources:     [...form.querySelectorAll('[name=sources]:checked')].map(el => el.value),
+        };
+        localStorage.setItem(SEARCH_KEY, JSON.stringify(data));
+    }
+
+    function loadSearchParams() {
+        try {
+            const raw = localStorage.getItem(SEARCH_KEY);
+            if (!raw) return;
+            const data = JSON.parse(raw);
+            const form = document.getElementById('search-form');
+            if (data.keyword)    form.querySelector('[name=keyword]').value    = data.keyword;
+            if (data.experience) form.querySelector('[name=experience]').value = data.experience;
+            if (data.work_format) {
+                form.querySelector('[name=work_format]').value = data.work_format;
+                toggleCity(data.work_format);
+            }
+            if (data.city)       form.querySelector('[name=city]').value       = data.city;
+            if (data.sources) {
+                form.querySelectorAll('[name=sources]').forEach(cb => {
+                    cb.checked = data.sources.includes(cb.value);
+                });
+            }
+        } catch(e) { /* битый JSON — просто игнорируем */ }
+    }
+
     document.getElementById('search-form').addEventListener('submit', () => {
+        saveSearchParams();
         document.getElementById('skills-hidden').value = localStorage.getItem(PROFILE_KEY) || '';
     });
 
@@ -302,20 +400,20 @@
             <td><span class="text-muted fw-semibold small">${job.company}</span></td>
             <td><span class="badge bg-white text-dark source-tag">${job.source}</span></td>
             <td>${techBadges(job.technologies)}</td>
+            <td><span class="text-muted small">${job.scraped_at || ''}</span></td>
             <td><p class="small text-secondary mb-0">${job.ai_summary || 'Analyzing vacancy requirements...'}</p></td>`;
         return tr;
     }
 
     function upsertRow(job) {
-        // Убираем заглушку "No vacancies found"
         const empty = tableBody.querySelector('td[colspan]');
         if (empty) empty.closest('tr').remove();
 
         const tr = buildRow(job);
         if (rowsMap[job.id]) {
-            rowsMap[job.id].replaceWith(tr);   // обновляем строку на месте
+            rowsMap[job.id].replaceWith(tr);
         } else {
-            tr.classList.add('row-new');        // анимация появления
+            tr.classList.add('row-new');
             tableBody.appendChild(tr);
         }
         rowsMap[job.id] = tr;
@@ -338,34 +436,42 @@
 
         es.addEventListener('done', () => {
             es.close();
-            statusEl.classList.add('d-none');
-            statusEl.classList.remove('d-flex');
+            // Если таблица пустая — скрапер ещё работает, ждём и переподключаемся
+            if (Object.keys(rowsMap).length === 0) {
+                setTimeout(startSSE, 10000);
+            } else {
+                statusEl.classList.add('d-none');
+                statusEl.classList.remove('d-flex');
+            }
         });
 
         es.onerror = () => {
             es.close();
-            statusEl.classList.add('d-none');
-            statusEl.classList.remove('d-flex');
+            // Если ещё есть PENDING строки — переподключаемся через 10 сек
+            if (document.querySelector('.pending-row') || tableBody.innerHTML === '') {
+                setTimeout(startSSE, 10000);
+            } else {
+                statusEl.classList.add('d-none');
+                statusEl.classList.remove('d-flex');
+            }
         };
     }
 
     // ── Init ───────────────────────────────────────────────────────────────
     window.addEventListener('DOMContentLoaded', () => {
         loadProfile();
+        loadSearchParams();
 
-        // Инициализируем rowsMap из уже отрендеренных сервером строк
         tableBody.querySelectorAll('tr[data-id]').forEach(tr => {
             rowsMap[tr.dataset.id] = tr;
         });
 
         const params = new URLSearchParams(window.location.search);
         if (params.get('stream') === '1') {
-            // Пришли после нажатия SCAN — очищаем таблицу и подключаемся к SSE
             tableBody.innerHTML = '';
             history.replaceState(null, '', '/');
             startSSE();
         } else if (tableBody.innerHTML.includes('PENDING')) {
-            // Есть незавершённые вакансии — подключаемся к SSE
             startSSE();
         }
     });
